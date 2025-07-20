@@ -31,6 +31,9 @@ type Thread struct {
 }
 
 func main() {
+	log.SetOutput(os.Stdout)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
@@ -241,10 +244,6 @@ func main() {
 			ginCtx.Header("Content-Type", "text/xml")
 			ginCtx.String(http.StatusOK, twimlResult)
 		}
-	})
-
-	router.GET("/health", func(ginCtx *gin.Context) {
-		ginCtx.String(http.StatusOK, "OK at %s", time.Now().Format(time.RFC1123))
 	})
 
 	router.Run(fmt.Sprintf(":%s", port))
