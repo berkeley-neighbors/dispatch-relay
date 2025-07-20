@@ -1,0 +1,25 @@
+version: '3'
+services:
+  dispatch-relay:
+    build: https://github.com/manufacturedba/dispatch-relay.git#main
+    environment:
+      - MONGO_CONNECTION_STR=mongodb://user:pass@mongodb
+      - AUTH_TOKEN=your_auth_token
+      - PORT=4514
+      - TWILIO_ACCOUNT_SID=1234
+      - TWILIO_AUTH_TOKEN=4567
+      - TWILIO_PHONE_NUMBER=+13735928559
+      - GIN_MODE=release
+    ports:
+      - "4514:4514"
+    depends_on:
+      - mongodb
+  mongodb:
+    image: mongodb/mongodb-community-server:6.0-ubi8
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=user
+      - MONGO_INITDB_ROOT_PASSWORD=pass
+    volumes:
+      - type: bind
+        source: ./data
+        target: /data/db
