@@ -243,5 +243,9 @@ func main() {
 		}
 	})
 
+	router.GET("/health", func(ginCtx *gin.Context) {
+		ginCtx.String(http.StatusOK, "OK at %s", time.Now().Format(time.RFC1123))
+	})
+
 	router.Run(fmt.Sprintf(":%s", port))
 }
