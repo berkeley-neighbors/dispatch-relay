@@ -13,10 +13,22 @@ import (
 	"github.com/twilio/twilio-go"
 	twilioApi "github.com/twilio/twilio-go/rest/api/v2010"
 	"github.com/twilio/twilio-go/twiml"
-	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
+
+type Staff struct {
+	ID          bson.ObjectID `bson:"_id"`
+	PhoneNumber string        `bson:"phone_number"`
+}
+
+type Thread struct {
+	ID          bson.ObjectID `bson:"_id"`
+	PhoneNumber string        `bson:"phone_number"`
+	Status      string        `bson:"status"`
+	CreatedAt   time.Time     `bson:"created_at"`
+}
 
 func main() {
 	err := godotenv.Load()
@@ -26,7 +38,7 @@ func main() {
 
 	router := gin.Default()
 
-	mongoConnectionHost := os.Getenv("MONGO_CONNECTION_HOST")
+	mongoConnectionStr := os.Getenv("MONGO_CONNECTION_STR")
 	requestAuthToken := os.Getenv("AUTH_TOKEN")
 	dispatchPhoneNumber := os.Getenv("TWILIO_PHONE_NUMBER")
 	port := os.Getenv("PORT")
@@ -38,8 +50,8 @@ func main() {
 	mongoConnectionPost := 27017
 
 	mongoDatabase := "dispatch_relay"
-	staffCollection := "staff"
-	threadCollection := "threads"
+	staffCollectionName := "staff"
+	threadCollectionName := "threads"
 
 	timeout := 60 * time.Second
 
@@ -61,11 +73,26 @@ func main() {
 			return
 		}
 
+		from := ginCtx.PostForm("From")
+		body := ginCtx.PostForm("Body")
+
+		if from == "" {
+			fmt.Println("From number is empty")
+			ginCtx.String(http.StatusBadRequest, "From number is required")
+			return
+		}
+
+		if body == "" {
+			fmt.Println("Body is empty")
+			ginCtx.String(http.StatusBadRequest, "Your text appears to be empty. Please resend")
+			return
+		}
+
 		timedCtx, cancel := context.WithTimeout(context.Background(), timeout)
 
 		defer cancel()
 
-		client, _ := mongo.Connect(options.Client().ApplyURI(fmt.Sprintf("mongodb://%s:%d", mongoConnectionHost, mongoConnectionPost)))
+		client, _ := mongo.Connect(options.Client().ApplyURI(mongoConnectionStr))
 
 		defer func() {
 			if err := client.Disconnect(timedCtx); err != nil {
@@ -73,51 +100,81 @@ func main() {
 			}
 		}()
 
-		from := ginCtx.PostForm("From")
+		staffCollection := client.Database(mongoDatabase).Collection(staffCollectionName)
 
-		staffCollection := client.Database(mongoDatabase).Collection(staffCollection)
+		var staffMatch Staff
 
-		var matchingNumber bson.M
+		filter := bson.M{"phone_number": from}
 
-		err := staffCollection.FindOne(timedCtx, bson.D{{Key: "phoneNumber", Value: from}}).Decode(&matchingNumber)
+		err := staffCollection.FindOne(timedCtx, filter).Decode(&staffMatch)
 
 		if err == nil {
 			fmt.Println("Number belongs to staff member. Ignoring.")
-			ginCtx.String(http.StatusOK, "OK")
+			doc, _ := twiml.CreateDocument()
+			xml, err := twiml.ToXML(doc)
+
+			if err != nil {
+				fmt.Println("Error creating TwiML document:", err)
+				ginCtx.String(http.StatusInternalServerError, "Server error")
+				return
+			}
+
+			ginCtx.Header("Content-Type", "text/xml")
+			ginCtx.String(http.StatusOK, xml)
+
 			return
-		} else if err != mongo.ErrNoDocuments {
+		}
+
+		if err != mongo.ErrNoDocuments {
 			fmt.Println("Error finding staff number:", err)
 			ginCtx.String(http.StatusInternalServerError, "Server error")
 			return
 		}
 
-		threadCollection := client.Database(mongoDatabase).Collection(threadCollection)
+		threadCollection := client.Database(mongoDatabase).Collection(threadCollectionName)
 
-		var openThreads bson.M
+		var openThread Thread
+		filter = bson.M{"phone_number": from, "status": "OPEN"}
 
-		err = threadCollection.FindOne(timedCtx, bson.D{{Key: "phoneNumber", Value: from}, {Key: "status", Value: "OPEN"}}).Decode(&openThreads)
+		err = threadCollection.FindOne(timedCtx, filter).Decode(&openThread)
 
-		if err != nil {
-			fmt.Println("Error finding open thread:", err)
+		if err == nil {
+			fmt.Println("Open thread found for phone number:", from)
+			doc, _ := twiml.CreateDocument()
+			xml, err := twiml.ToXML(doc)
+			if err != nil {
+				fmt.Println("Error creating TwiML document:", err)
+				ginCtx.String(http.StatusInternalServerError, "Server error")
+				return
+			}
+
+			ginCtx.Header("Content-Type", "text/xml")
+			ginCtx.String(http.StatusOK, xml)
+			return
+		}
+
+		if err != mongo.ErrNoDocuments {
+			fmt.Println("Error finding threads:", err)
 			ginCtx.String(http.StatusInternalServerError, "Server error")
 			return
 		}
 
-		if err == mongo.ErrNoDocuments {
-			fmt.Println("No open thread found for this number.")
-			_, err := threadCollection.InsertOne(timedCtx, bson.D{
-				{Key: "phoneNumber", Value: from},
-				{Key: "status", Value: "OPEN"},
-			})
-			if err != nil {
-				fmt.Println("Error creating thread:", err)
-				ginCtx.String(http.StatusInternalServerError, "Server error")
-				return
-			}
+		fmt.Println("Starting new thread for phone number:", from)
+
+		_, err = threadCollection.InsertOne(timedCtx, bson.M{
+			"phone_number": from,
+			"status":       "OPEN",
+			"created_at":   time.Now(),
+		})
+
+		if err != nil {
+			fmt.Println("Error creating thread:", err)
+			ginCtx.String(http.StatusInternalServerError, "Server error")
+			return
 		}
 
 		var allStaffNumbers []bson.M
-		cursor, err := staffCollection.Find(timedCtx, bson.D{})
+		cursor, err := staffCollection.Find(timedCtx, bson.M{})
 
 		if err != nil {
 			fmt.Println("Error retrieving staff numbers:", err)
@@ -143,20 +200,22 @@ func main() {
 			return
 		}
 
-		body := ginCtx.PostForm("Body")
-
 		twilioClient := twilio.NewRestClient()
 
-		for _, staffMember := range allStaffNumbers {
-			staffPhoneNumber, ok := staffMember["phoneNumber"].(string)
+		fmt.Printf("Messaging %d staff members\n", len(allStaffNumbers))
 
+		staffMessage := fmt.Sprintf("Dispatch message received\n\nFrom: %s\nMessage: %s\nTime: %s\n\nTeam, please respond", from, body, time.Now().Format(time.RFC1123))
+		for _, staffMember := range allStaffNumbers {
+			staffPhoneNumber, ok := staffMember["phone_number"].(string)
+
+			fmt.Printf("Contacting: %s\n", staffPhoneNumber)
 			if !ok {
 				fmt.Println("Invalid staff phone number format")
 				continue
 			}
 
 			params := &twilioApi.CreateMessageParams{}
-			params.SetBody(body)
+			params.SetBody(staffMessage)
 			params.SetFrom(dispatchPhoneNumber)
 			params.SetTo(staffPhoneNumber)
 
@@ -173,7 +232,7 @@ func main() {
 		}
 
 		message := &twiml.MessagingMessage{
-			Body: "Engaging dispatch staff. Please wait for a response.",
+			Body: "Engaging staff. Please wait for a response.",
 		}
 
 		twimlResult, err := twiml.Messages([]twiml.Element{message})
