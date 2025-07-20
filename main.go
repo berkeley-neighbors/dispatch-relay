@@ -47,8 +47,6 @@ func main() {
 		port = "4514"
 	}
 
-	mongoConnectionPost := 27017
-
 	mongoDatabase := "dispatch_relay"
 	staffCollectionName := "staff"
 	threadCollectionName := "threads"
