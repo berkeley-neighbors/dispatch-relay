@@ -1,0 +1,1 @@
+You are expressly prohibited from using, copying, modifying, publishing, distributing, sublicensing, and/or selling copies of this software. Eat my shorts.
