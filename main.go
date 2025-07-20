@@ -246,5 +246,14 @@ func main() {
 		}
 	})
 
+	router.GET("/health", func(ginCtx *gin.Context) {
+		log.Printf("Health check requested from IP: %s", ginCtx.ClientIP())
+		ginCtx.JSON(http.StatusOK, gin.H{
+			"status":    "healthy",
+			"timestamp": time.Now().Format(time.RFC3339),
+			"service":   "dispatch-relay",
+		})
+	})
+
 	router.Run(fmt.Sprintf(":%s", port))
 }
