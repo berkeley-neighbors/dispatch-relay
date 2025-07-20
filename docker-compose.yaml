@@ -1,7 +1,7 @@
 version: '3'
 services:
   dispatch-relay:
-    build: https://github.com/manufacturedba/dispatch-relay.git#main
+    build: https://github.com/berkeley-neighbors/dispatch-relay.git#main
     environment:
       - MONGO_CONNECTION_STR=mongodb://user:pass@mongodb
       - AUTH_TOKEN=your_auth_token
@@ -20,6 +20,8 @@ services:
       - MONGO_INITDB_ROOT_USERNAME=user
       - MONGO_INITDB_ROOT_PASSWORD=pass
     volumes:
-      - type: bind
-        source: ./data
-        target: /data/db
+      - ./mongo-data:/data/db
+        
+volumes:
+  mongo-data:
+    external: true
