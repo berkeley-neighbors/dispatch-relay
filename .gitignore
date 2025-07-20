@@ -1,0 +1,2 @@
+# Environment variables - Docker environment variables are only production way to load these
+.env

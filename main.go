@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/twilio/twilio-go"
 	twilioApi "github.com/twilio/twilio-go/rest/api/v2010"
 	"github.com/twilio/twilio-go/twiml"
@@ -17,12 +19,17 @@ import (
 )
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	router := gin.Default()
 
 	mongoConnectionHost := os.Getenv("MONGO_CONNECTION_HOST")
 	requestAuthToken := os.Getenv("AUTH_TOKEN")
-	dispatchPhoneNumber := os.Getenv("DISPATCH_PHONE_NUMBER")
-	port := os.Getenv("PORT") // Default to 4514 if not set
+	dispatchPhoneNumber := os.Getenv("TWILIO_PHONE_NUMBER")
+	port := os.Getenv("PORT")
 
 	if port == "" {
 		port = "4514"
@@ -66,7 +73,6 @@ func main() {
 			}
 		}()
 
-		// Get the message the user sent our Twilio number
 		from := ginCtx.PostForm("From")
 
 		staffCollection := client.Database(mongoDatabase).Collection(staffCollection)
@@ -180,5 +186,5 @@ func main() {
 		}
 	})
 
-	router.Run(fmt.Sprintf(":%s", port)) // Start the server on the specified port
+	router.Run(fmt.Sprintf(":%s", port))
 }
