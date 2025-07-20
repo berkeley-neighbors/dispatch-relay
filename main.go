@@ -36,7 +36,7 @@ func main() {
 
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		fmt.Println("Warning: Error loading .env file, environment variables may not be set")
 	}
 
 	router := gin.Default()
