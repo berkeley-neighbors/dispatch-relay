@@ -10,9 +10,18 @@ preconfigured collection of phone numbers
 
 ## Environment Variables
 
-- `MONGO_CONNECTION_HOST`: The host for the MongoDB connection.
+- `MONGO_CONNECTION_STR`: The connection string for the MongoDB database.
 - `AUTH_TOKEN`: The authentication token for the Twilio webhook.
-- `DISPATCH_PHONE_NUMBER`: The phone number to which messages are dispatched.
-- `PORT`: The port on which the server will run (default is `4514`
+- `TWILIO_PHONE_NUMBER`: The phone number to which messages are dispatched.
+- `PORT`: The port on which the server will run (default is `4514`).
 - `TWILIO_AUTH_TOKEN`: The Twilio authentication token for verifying requests.
 - `TWILIO_ACCOUNT_SID`: The Twilio account SID for verifying requests.
+- `GIN_MODE`: The mode for the Gin framework (default is `release`).
+
+## Testing
+
+```bash
+curl -X POST "http://localhost:4514/sms?token=your_auth_token" \
+     -H "application/x-www-form-urlencoded" \
+     -d 'From=+16646156650'
+```
