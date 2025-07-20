@@ -23,5 +23,5 @@ preconfigured collection of phone numbers
 ```bash
 curl -X POST "http://localhost:4514/sms?token=your_auth_token" \
      -H "application/x-www-form-urlencoded" \
-     -d 'From=+16646156650'
+     -d 'From=+13735928559'
 ```
