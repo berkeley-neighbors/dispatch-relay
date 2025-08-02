@@ -255,5 +255,10 @@ func main() {
 		})
 	})
 
+	router.HEAD("/health", func(ginCtx *gin.Context) {
+		log.Printf("Health check requested from IP: %s", ginCtx.ClientIP())
+		ginCtx.Status(http.StatusOK)
+	})
+
 	router.Run(fmt.Sprintf(":%s", port))
 }
