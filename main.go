@@ -44,6 +44,8 @@ func main() {
 	mongoConnectionStr := os.Getenv("MONGO_CONNECTION_STR")
 	requestAuthToken := os.Getenv("AUTH_TOKEN")
 	dispatchPhoneNumber := os.Getenv("TWILIO_PHONE_NUMBER")
+	fromPhoneNumber := os.Getenv("DISPATCH_PHONE_NUMBER")
+
 	port := os.Getenv("PORT")
 
 	if port == "" {
@@ -392,7 +394,7 @@ func main() {
 			twimlXml := `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say>Connecting you to dispatch staff. Please hold.</Say>
-    <Dial timeout="20" action="/voice-status?token=` + requestAuthToken + `&amp;from=` + from + `">`
+    <Dial timeout="20" action="/voice-status?token=` + requestAuthToken + `&amp;from=` + fromPhoneNumber + `">`
 
 			// Add each staff number to try
 			for _, staffMember := range allStaffNumbers {
