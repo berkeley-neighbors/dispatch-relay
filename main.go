@@ -105,6 +105,39 @@ func upperString(s string) string {
 	return upper
 }
 
+// replaceTemplateVars replaces template variables in format {{varname}} with actual values
+func replaceTemplateVars(template string, vars map[string]string) string {
+	result := template
+
+	for key, value := range vars {
+		placeholder := "{{" + key + "}}"
+		result = replaceString(result, placeholder, value)
+	}
+
+	return result
+}
+
+func replaceString(s string, old string, new string) string {
+	if s == "" || old == "" {
+		return s
+	}
+
+	result := ""
+	i := 0
+
+	for i < len(s) {
+		if i+len(old) <= len(s) && s[i:i+len(old)] == old {
+			result += new
+			i += len(old)
+		} else {
+			result += string(s[i])
+			i++
+		}
+	}
+
+	return result
+}
+
 func main() {
 	log.SetOutput(os.Stdout)
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -121,6 +154,18 @@ func main() {
 	dispatchPhoneNumber := os.Getenv("TWILIO_PHONE_NUMBER")
 	callerIdPhoneNumber := os.Getenv("DISPATCH_PHONE_NUMBER")
 	notificationMethods := os.Getenv("NOTIFICATION_METHODS")
+
+	// SMS message templates
+	smsStaffTemplate := os.Getenv("SMS_STAFF_MESSAGE_TEMPLATE")
+	smsSenderResponse := os.Getenv("SMS_SENDER_RESPONSE_MESSAGE")
+
+	// Set defaults if not provided
+	if smsStaffTemplate == "" {
+		smsStaffTemplate = "Dispatch message received\n\nFrom: {{from}}\nMessage: {{body}}\nTime: {{time}}\n\nTeam, please respond"
+	}
+	if smsSenderResponse == "" {
+		smsSenderResponse = "Engaging staff. Please wait for a response."
+	}
 
 	port := os.Getenv("PORT")
 
@@ -157,6 +202,10 @@ func main() {
 	}
 
 	log.Printf("SMS enabled: %v, Voice enabled: %v", enableSMS, enableVoice)
+	if enableSMS {
+		log.Printf("SMS staff message template: %s", smsStaffTemplate)
+		log.Printf("SMS sender response: %s", smsSenderResponse)
+	}
 
 	if enableSMS {
 		log.Println("Registering /sms route")
@@ -299,7 +348,13 @@ func main() {
 
 			fmt.Printf("Messaging %d staff members\n", len(allStaffNumbers))
 
-			staffMessage := fmt.Sprintf("Dispatch message received\n\nFrom: %s\nMessage: %s\nTime: %s\n\nTeam, please respond", from, body, time.Now().Format(time.RFC1123))
+			// Build staff message using template with variable replacement
+			staffMessage := replaceTemplateVars(smsStaffTemplate, map[string]string{
+				"from": from,
+				"body": body,
+				"time": time.Now().Format(time.RFC1123),
+			})
+
 			for _, staffMember := range allStaffNumbers {
 				staffPhoneNumber, ok := staffMember["phone_number"].(string)
 
@@ -327,7 +382,7 @@ func main() {
 			}
 
 			message := &twiml.MessagingMessage{
-				Body: "Engaging staff. Please wait for a response.",
+				Body: smsSenderResponse,
 			}
 
 			twimlResult, err := twiml.Messages([]twiml.Element{message})
