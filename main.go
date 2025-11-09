@@ -154,6 +154,7 @@ func main() {
 	dispatchPhoneNumber := os.Getenv("TWILIO_PHONE_NUMBER")
 	callerIdPhoneNumber := os.Getenv("DISPATCH_PHONE_NUMBER")
 	notificationMethods := os.Getenv("NOTIFICATION_METHODS")
+	notificationStrategy := os.Getenv("NOTIFICATION_STRATEGY")
 
 	// SMS message templates
 	smsStaffTemplate := os.Getenv("SMS_STAFF_MESSAGE_TEMPLATE")
@@ -163,9 +164,16 @@ func main() {
 	if smsStaffTemplate == "" {
 		smsStaffTemplate = "Dispatch message received\n\nFrom: {{from}}\nMessage: {{body}}\nTime: {{time}}\n\nTeam, please respond"
 	}
+
 	if smsSenderResponse == "" {
 		smsSenderResponse = "Engaging staff. Please wait for a response."
 	}
+
+	if notificationStrategy == "" {
+		notificationStrategy = "THREAD"
+	}
+
+	notificationStrategy = upperString(notificationStrategy)
 
 	port := os.Getenv("PORT")
 
@@ -282,7 +290,101 @@ func main() {
 
 			err = threadCollection.FindOne(timedCtx, filter).Decode(&openThread)
 
-			if err == nil {
+			threadExists := (err == nil)
+
+			if err != mongo.ErrNoDocuments {
+				fmt.Println("Error finding threads:", err)
+				ginCtx.String(http.StatusInternalServerError, "Server error")
+				return
+			}
+
+			if !threadExists {
+				fmt.Println("Starting new thread for phone number:", from)
+
+				_, err = threadCollection.InsertOne(timedCtx, bson.M{
+					"phone_number": from,
+					"status":       "OPEN",
+					"created_at":   time.Now(),
+				})
+
+				if err != nil {
+					fmt.Println("Error creating thread:", err)
+					ginCtx.String(http.StatusInternalServerError, "Server error")
+					return
+				}
+			}
+
+			if !threadExists || notificationStrategy == "ALWAYS" {
+				var allStaffNumbers []bson.M
+				cursor, err := staffCollection.Find(timedCtx, bson.M{})
+
+				if err != nil {
+					fmt.Println("Error retrieving staff numbers:", err)
+					ginCtx.String(http.StatusInternalServerError, "Server error")
+					return
+				}
+
+				defer cursor.Close(timedCtx)
+
+				for cursor.Next(timedCtx) {
+					var staffMember bson.M
+					if err := cursor.Decode(&staffMember); err != nil {
+						fmt.Println("Error decoding staff member:", err)
+						ginCtx.String(http.StatusInternalServerError, "Server error")
+						return
+					}
+					allStaffNumbers = append(allStaffNumbers, staffMember)
+				}
+
+				if err := cursor.Err(); err != nil {
+					fmt.Println("Cursor error:", err)
+					ginCtx.String(http.StatusInternalServerError, "Server error")
+					return
+				}
+
+				twilioClient := twilio.NewRestClient()
+
+				fmt.Printf("Messaging %d staff members\n", len(allStaffNumbers))
+
+				// Build staff message using template with variable replacement
+				staffMessage := replaceTemplateVars(smsStaffTemplate, map[string]string{
+					"from": from,
+					"body": body,
+					"time": time.Now().Format(time.RFC1123),
+				})
+
+				for _, staffMember := range allStaffNumbers {
+					staffPhoneNumber, ok := staffMember["phone_number"].(string)
+
+					fmt.Printf("Contacting: %s\n", staffPhoneNumber)
+					if !ok {
+						fmt.Println("Invalid staff phone number format")
+						continue
+					}
+
+					params := &twilioApi.CreateMessageParams{}
+					params.SetBody(staffMessage)
+					params.SetFrom(dispatchPhoneNumber)
+					params.SetTo(staffPhoneNumber)
+
+					resp, err := twilioClient.Api.CreateMessage(params)
+					if err != nil {
+						fmt.Println("Error sending message:", err.Error())
+					} else {
+						if resp.Body != nil {
+							fmt.Println(*resp.Body)
+						} else {
+							fmt.Println(resp.Body)
+						}
+					}
+				}
+			} else {
+				fmt.Println("Skipping staff notification")
+			}
+
+			var senderResponse string
+
+			if threadExists {
 				fmt.Println("Open thread found for phone number:", from)
 				doc, _ := twiml.CreateDocument()
 				xml, err := twiml.ToXML(doc)
@@ -292,107 +394,24 @@ func main() {
 					return
 				}
 
-				ginCtx.Header("Content-Type", "text/xml")
-				ginCtx.String(http.StatusOK, xml)
-				return
-			}
+				senderResponse = xml
+			} else {
+				message := &twiml.MessagingMessage{
+					Body: smsSenderResponse,
+				}
 
-			if err != mongo.ErrNoDocuments {
-				fmt.Println("Error finding threads:", err)
-				ginCtx.String(http.StatusInternalServerError, "Server error")
-				return
-			}
+				xml, err := twiml.Messages([]twiml.Element{message})
 
-			fmt.Println("Starting new thread for phone number:", from)
-
-			_, err = threadCollection.InsertOne(timedCtx, bson.M{
-				"phone_number": from,
-				"status":       "OPEN",
-				"created_at":   time.Now(),
-			})
-
-			if err != nil {
-				fmt.Println("Error creating thread:", err)
-				ginCtx.String(http.StatusInternalServerError, "Server error")
-				return
-			}
-
-			var allStaffNumbers []bson.M
-			cursor, err := staffCollection.Find(timedCtx, bson.M{})
-
-			if err != nil {
-				fmt.Println("Error retrieving staff numbers:", err)
-				ginCtx.String(http.StatusInternalServerError, "Server error")
-				return
-			}
-
-			defer cursor.Close(timedCtx)
-
-			for cursor.Next(timedCtx) {
-				var staffMember bson.M
-				if err := cursor.Decode(&staffMember); err != nil {
-					fmt.Println("Error decoding staff member:", err)
-					ginCtx.String(http.StatusInternalServerError, "Server error")
+				if err != nil {
+					ginCtx.String(http.StatusInternalServerError, err.Error())
 					return
 				}
-				allStaffNumbers = append(allStaffNumbers, staffMember)
+
+				senderResponse = xml
 			}
 
-			if err := cursor.Err(); err != nil {
-				fmt.Println("Cursor error:", err)
-				ginCtx.String(http.StatusInternalServerError, "Server error")
-				return
-			}
-
-			twilioClient := twilio.NewRestClient()
-
-			fmt.Printf("Messaging %d staff members\n", len(allStaffNumbers))
-
-			// Build staff message using template with variable replacement
-			staffMessage := replaceTemplateVars(smsStaffTemplate, map[string]string{
-				"from": from,
-				"body": body,
-				"time": time.Now().Format(time.RFC1123),
-			})
-
-			for _, staffMember := range allStaffNumbers {
-				staffPhoneNumber, ok := staffMember["phone_number"].(string)
-
-				fmt.Printf("Contacting: %s\n", staffPhoneNumber)
-				if !ok {
-					fmt.Println("Invalid staff phone number format")
-					continue
-				}
-
-				params := &twilioApi.CreateMessageParams{}
-				params.SetBody(staffMessage)
-				params.SetFrom(dispatchPhoneNumber)
-				params.SetTo(staffPhoneNumber)
-
-				resp, err := twilioClient.Api.CreateMessage(params)
-				if err != nil {
-					fmt.Println("Error sending message:", err.Error())
-				} else {
-					if resp.Body != nil {
-						fmt.Println(*resp.Body)
-					} else {
-						fmt.Println(resp.Body)
-					}
-				}
-			}
-
-			message := &twiml.MessagingMessage{
-				Body: smsSenderResponse,
-			}
-
-			twimlResult, err := twiml.Messages([]twiml.Element{message})
-
-			if err != nil {
-				ginCtx.String(http.StatusInternalServerError, err.Error())
-			} else {
-				ginCtx.Header("Content-Type", "text/xml")
-				ginCtx.String(http.StatusOK, twimlResult)
-			}
+			ginCtx.Header("Content-Type", "text/xml")
+			ginCtx.String(http.StatusOK, senderResponse)
 		})
 	}
 
