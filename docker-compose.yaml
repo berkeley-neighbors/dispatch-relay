@@ -11,6 +11,8 @@ services:
       - TWILIO_PHONE_NUMBER=+13735928559
       - GIN_MODE=release
       - NOTIFICATION_METHODS=SMS,CALL
+      - SMS_STAFF_MESSAGE_TEMPLATE=Someone has sent a message
+      - SMS_SENDER_RESPONSE_MESSAGE=Thank you for your message. Our team has been notified and will respond shortly.
     ports:
       - "4514:4514"
     depends_on:
