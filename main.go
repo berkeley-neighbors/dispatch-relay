@@ -292,7 +292,7 @@ func main() {
 
 			threadExists := (err == nil)
 
-			if err != mongo.ErrNoDocuments {
+			if err != nil && err != mongo.ErrNoDocuments {
 				fmt.Println("Error finding threads:", err)
 				ginCtx.String(http.StatusInternalServerError, "Server error")
 				return
