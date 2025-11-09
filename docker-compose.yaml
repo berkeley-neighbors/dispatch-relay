@@ -1,27 +1,40 @@
-version: '3'
+version: '3.8'
 services:
   dispatch-relay:
     build: https://github.com/berkeley-neighbors/dispatch-relay.git#main
     environment:
-      - MONGO_CONNECTION_STR=mongodb://user:pass@mongodb
+      - MONGO_CONNECTION_STR=mongodb://user:pass@mongodb:27017
       - AUTH_TOKEN=your_auth_token
       - PORT=4514
       - TWILIO_ACCOUNT_SID=1234
       - TWILIO_AUTH_TOKEN=4567
       - TWILIO_PHONE_NUMBER=+13735928559
       - GIN_MODE=release
+      - NOTIFICATION_METHODS=SMS,CALL
     ports:
       - "4514:4514"
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+    
   mongodb:
-    image: mongodb/mongodb-community-server:6.0-ubi8
+    image: mongo:6.0
     environment:
       - MONGO_INITDB_ROOT_USERNAME=user
       - MONGO_INITDB_ROOT_PASSWORD=pass
+    ports:
+      - "27017:27017"
     volumes:
-      - ./mongo-data:/data/db
+      - mongo-data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
         
 volumes:
   mongo-data:
-    external: true
+    driver: local
