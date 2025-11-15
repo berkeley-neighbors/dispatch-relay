@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"net/http"
 	"time"
 
@@ -149,6 +150,10 @@ func (h *handlers) Voice() gin.HandlerFunc {
 			ginCtx.String(http.StatusInternalServerError, "Server error")
 			return
 		}
+
+		rand.Shuffle(len(allStaffNumbers), func(i, j int) {
+			allStaffNumbers[i], allStaffNumbers[j] = allStaffNumbers[j], allStaffNumbers[i]
+		})
 
 		if len(allStaffNumbers) == 0 {
 			fmt.Printf("No staff members found in database")
