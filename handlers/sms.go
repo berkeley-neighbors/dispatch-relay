@@ -67,7 +67,7 @@ func (h *handlers) SMS() gin.HandlerFunc {
 			return
 		}
 
-		if err != mongo.ErrNoDocuments {
+		if err != nil && err != mongo.ErrNoDocuments {
 			fmt.Println("Error finding staff number:", err)
 			ginCtx.String(http.StatusInternalServerError, "Server error")
 			return
