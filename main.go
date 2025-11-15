@@ -19,8 +19,8 @@ import (
 
 func routeByTestParam(prodHandler, testHandler gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		testParam := c.Query("test")
-		if testParam == "1" {
+		_, exists := c.GetQuery("test")
+		if exists {
 			log.Printf("Routing to TEST handler")
 			testHandler(c)
 		} else {
