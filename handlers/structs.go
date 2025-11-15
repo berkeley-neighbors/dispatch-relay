@@ -60,7 +60,7 @@ func NewService(client *mongo.Client, databaseName string, config Config, templa
 }
 
 type Staff struct {
-	ID          bson.ObjectID `bson:"_id" json:"_id"`
+	ID          bson.ObjectID `bson:"_id,omitempty" json:"_id"`
 	PhoneNumber string        `bson:"phone_number" json:"phone_number"`
 	Active      bool          `bson:"active" json:"active"`
 }

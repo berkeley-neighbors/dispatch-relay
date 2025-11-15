@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -78,6 +79,7 @@ func (h *handlers) AddStaff() gin.HandlerFunc {
 		// Check if phone number already exists
 		var existingStaff Staff
 		err := staffCollection.FindOne(ctx, bson.M{"phone_number": request.PhoneNumber}).Decode(&existingStaff)
+
 		if err == nil {
 			ginCtx.JSON(http.StatusConflict, gin.H{"error": "Phone number already exists"})
 			return
@@ -86,20 +88,21 @@ func (h *handlers) AddStaff() gin.HandlerFunc {
 			return
 		}
 
-		// Insert new staff member
 		newStaff := Staff{
+			ID:          bson.NewObjectID(),
 			PhoneNumber: request.PhoneNumber,
 			Active:      true,
 		}
 
-		result, err := staffCollection.InsertOne(ctx, newStaff)
+		_, err = staffCollection.InsertOne(ctx, newStaff)
 		if err != nil {
+			log.Printf("Error inserting staff: %v", err)
 			ginCtx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add staff"})
 			return
 		}
 
-		newStaff.ID = result.InsertedID.(bson.ObjectID)
 		ginCtx.JSON(http.StatusCreated, newStaff)
+
 	}
 }
 
