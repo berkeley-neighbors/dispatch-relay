@@ -159,6 +159,9 @@ func main() {
 	// SMS message templates
 	smsStaffTemplate := os.Getenv("SMS_STAFF_MESSAGE_TEMPLATE")
 	smsSenderResponse := os.Getenv("SMS_SENDER_RESPONSE_MESSAGE")
+	voiceConnectingMessage := os.Getenv("VOICE_CONNECTING_MESSAGE")
+	voiceMissedCallStaffMessage := os.Getenv("VOICE_MISSED_CALL_STAFF_MESSAGE")
+	voiceMissedCallCallerMessage := os.Getenv("VOICE_MISSED_CALL_CALLER_MESSAGE")
 
 	// Set defaults if not provided
 	if smsStaffTemplate == "" {
@@ -167,6 +170,18 @@ func main() {
 
 	if smsSenderResponse == "" {
 		smsSenderResponse = "Engaging staff. Please wait for a response."
+	}
+
+	if voiceConnectingMessage == "" {
+		voiceConnectingMessage = "Connecting you to dispatch staff. Please hold."
+	}
+
+	if voiceMissedCallStaffMessage == "" {
+		voiceMissedCallStaffMessage = "MISSED EMERGENCY CALL from {{from}} at {{time}}. Caller could not reach anyone by phone. Please respond immediately."
+	}
+
+	if voiceMissedCallCallerMessage == "" {
+		voiceMissedCallCallerMessage = "Sorry, no dispatch staff are available to take your call right now. We have sent an urgent message to all staff members. Please try calling back in a few minutes or send a text message for assistance."
 	}
 
 	if notificationStrategy == "" {
@@ -562,7 +577,7 @@ func main() {
 				// Build XML string for multiple numbers to try in sequence
 				twimlXml := `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say>Connecting you to dispatch staff. Please hold.</Say>
+    <Say>` + voiceConnectingMessage + `</Say>
     <Dial timeout="20" callerId="` + callerIdPhoneNumber + `" action="/voice-status?token=` + requestAuthToken + `&amp;from=` + from + `">`
 
 				// Add each staff number to try
@@ -662,7 +677,10 @@ func main() {
 
 				// Send SMS notifications since call wasn't answered
 				twilioClient := twilio.NewRestClient()
-				staffMessage := fmt.Sprintf("MISSED EMERGENCY CALL from %s at %s. Caller could not reach anyone by phone. Please respond immediately.", from, time.Now().Format(time.RFC1123))
+				staffMessage := replaceTemplateVars(voiceMissedCallStaffMessage, map[string]string{
+					"from": from,
+					"time": time.Now().Format(time.RFC1123),
+				})
 
 				for _, staffMember := range allStaffNumbers {
 					staffPhoneNumber, ok := staffMember["phone_number"].(string)
@@ -684,7 +702,7 @@ func main() {
 				}
 
 				say := &twiml.VoiceSay{
-					Message: "Sorry, no dispatch staff are available to take your call right now. We have sent an urgent message to all staff members. Please try calling back in a few minutes or send a text message for assistance.",
+					Message: voiceMissedCallCallerMessage,
 				}
 
 				twimlResult, err := twiml.Voice([]twiml.Element{say})

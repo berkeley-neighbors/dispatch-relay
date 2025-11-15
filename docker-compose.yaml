@@ -13,6 +13,9 @@ services:
       - NOTIFICATION_METHODS=SMS,CALL
       - SMS_STAFF_MESSAGE_TEMPLATE=Someone has sent a message
       - SMS_SENDER_RESPONSE_MESSAGE=Thank you for your message. Our team has been notified and will respond shortly.
+      - VOICE_MISSED_CALL_STAFF_MESSAGE=MISSED EMERGENCY CALL
+      - VOICE_MISSED_CALL_CALLER_MESSAGE=We noticed we missed your emergency call. Please call back or send a text message.
+      - VOICE_CONNECTING_MESSAGE=Connecting you to emergency dispatch. Please hold.
       - NOTIFICATION_STRATEGY=ALWAYS
     ports:
       - "4514:4514"
