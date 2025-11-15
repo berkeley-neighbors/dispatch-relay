@@ -187,6 +187,20 @@ func main() {
 		router.POST("/voice-status", routeByTestParam(realHandlers.VoiceStatus(), testHandlers.VoiceStatus()))
 	}
 
+	// Production API routes for staff management
+	log.Println("Registering production API routes")
+	router.GET("/", realHandlers.RenderHTML())
+	router.GET("/api/staff", realHandlers.ListStaff())
+	router.POST("/api/staff", realHandlers.AddStaff())
+	router.DELETE("/api/staff/:phone_number", realHandlers.RemoveStaff())
+
+	// Test API routes for staff management
+	log.Println("Registering test API routes")
+	router.GET("/test", testHandlers.RenderHTML())
+	router.GET("/test/api/staff", testHandlers.ListStaff())
+	router.POST("/test/api/staff", testHandlers.AddStaff())
+	router.DELETE("/test/api/staff/:phone_number", testHandlers.RemoveStaff())
+
 	router.GET("/health", func(ginCtx *gin.Context) {
 		log.Printf("Health check requested from IP: %s", ginCtx.ClientIP())
 

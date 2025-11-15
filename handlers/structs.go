@@ -60,9 +60,9 @@ func NewService(client *mongo.Client, databaseName string, config Config, templa
 }
 
 type Staff struct {
-	ID          bson.ObjectID `bson:"_id"`
-	PhoneNumber string        `bson:"phone_number"`
-	Active      bool          `bson:"active"`
+	ID          bson.ObjectID `bson:"_id" json:"_id"`
+	PhoneNumber string        `bson:"phone_number" json:"phone_number"`
+	Active      bool          `bson:"active" json:"active"`
 }
 
 type Thread struct {
