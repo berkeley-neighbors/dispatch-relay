@@ -144,6 +144,7 @@ func main() {
 		Timeout:                 timeout,
 		DispatchPhoneNumber:     dispatchPhoneNumber,
 		NotificationPhoneNumber: notificationPhoneNumber,
+		SkipStaffIgnore:         false,
 	}
 
 	testConfig := handlers.Config{
@@ -152,6 +153,7 @@ func main() {
 		Timeout:                 timeout,
 		DispatchPhoneNumber:     dispatchPhoneNumberTest,
 		NotificationPhoneNumber: notificationPhoneNumberTest,
+		SkipStaffIgnore:         true,
 	}
 
 	templates := handlers.MessageTemplates{

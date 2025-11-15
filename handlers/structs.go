@@ -38,6 +38,7 @@ type Config struct {
 	DispatchPhoneNumber     string
 	NotificationPhoneNumber string
 	NotificationStrategy    string
+	SkipStaffIgnore         bool
 	Timeout                 time.Duration
 }
 

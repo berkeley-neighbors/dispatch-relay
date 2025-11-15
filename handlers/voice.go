@@ -60,7 +60,9 @@ func (h *handlers) Voice() gin.HandlerFunc {
 
 		err := staffCollection.FindOne(timedCtx, filter).Decode(&staffMatch)
 
-		if err == nil {
+		isStaffMember := (err == nil)
+
+		if isStaffMember && !h.Config.SkipStaffIgnore {
 			fmt.Println("Call from staff member. Ignoring.")
 			// Return empty TwiML to hang up
 			doc, _ := twiml.CreateDocument()
@@ -77,7 +79,7 @@ func (h *handlers) Voice() gin.HandlerFunc {
 			return
 		}
 
-		if err != mongo.ErrNoDocuments {
+		if err != nil && err != mongo.ErrNoDocuments {
 			fmt.Printf("Error finding staff number %s: %v", from, err)
 			ginCtx.String(http.StatusInternalServerError, "Server error")
 			return
@@ -130,6 +132,15 @@ func (h *handlers) Voice() gin.HandlerFunc {
 				ginCtx.String(http.StatusInternalServerError, "Server error")
 				return
 			}
+
+			if isStaffMember && h.Config.SkipStaffIgnore {
+				staffPhoneNumber, ok := staffMember["phone_number"].(string)
+				if ok && staffPhoneNumber == from {
+					fmt.Printf("Skipping caller's own number from dial list: %s\n", from)
+					continue
+				}
+			}
+
 			allStaffNumbers = append(allStaffNumbers, staffMember)
 		}
 

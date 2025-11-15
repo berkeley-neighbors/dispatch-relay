@@ -50,7 +50,8 @@ func (h *handlers) SMS() gin.HandlerFunc {
 
 		err := staffCollection.FindOne(timedCtx, filter).Decode(&staffMatch)
 
-		if err == nil {
+		isStaffMember := (err == nil)
+		if isStaffMember && !h.Config.SkipStaffIgnore {
 			fmt.Println("Number belongs to staff member. Ignoring.")
 			doc, _ := twiml.CreateDocument()
 			xml, err := twiml.ToXML(doc)
