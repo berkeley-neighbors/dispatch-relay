@@ -17,6 +17,9 @@ WORKDIR /root
 # Copy the binary from builder
 COPY --from=builder /app/main /root
 
+# Copy static files
+COPY --from=builder /app/static /root/static
+
 # Create non-root user
 RUN adduser -D -u 1000 runner && \
     chown -R runner:runner /root

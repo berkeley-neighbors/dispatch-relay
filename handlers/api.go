@@ -15,11 +15,13 @@ func (h *handlers) RenderHTML() gin.HandlerFunc {
 	return func(ginCtx *gin.Context) {
 		token := ginCtx.Query("token")
 		if token != h.Config.RequestAuthToken {
+			log.Printf("RenderHTML: Unauthorized access attempt from %s", ginCtx.ClientIP())
 			ginCtx.String(http.StatusUnauthorized, "Unauthorized: Invalid or missing token")
 			return
 		}
 
-		ginCtx.File("static/index.html")
+		log.Printf("RenderHTML: Serving index.html to %s", ginCtx.ClientIP())
+		ginCtx.File("./static/index.html")
 	}
 }
 
