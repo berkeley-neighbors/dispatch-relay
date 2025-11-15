@@ -17,6 +17,18 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+func routeByTestParam(prodHandler, testHandler gin.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		testParam := c.Query("test")
+		if testParam == "1" {
+			log.Printf("Routing to TEST handler")
+			testHandler(c)
+		} else {
+			prodHandler(c)
+		}
+	}
+}
+
 func main() {
 	log.SetOutput(os.Stdout)
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -30,7 +42,11 @@ func main() {
 
 	mongoConnectionStr := os.Getenv("MONGO_CONNECTION_STR")
 	requestAuthToken := os.Getenv("AUTH_TOKEN")
-	dispatchPhoneNumber := os.Getenv("TWILIO_PHONE_NUMBER")
+	notificationPhoneNumber := os.Getenv("NOTIFICATION_PHONE_NUMBER")
+	notificationPhoneNumberTest := os.Getenv("NOTIFICATION_PHONE_NUMBER_TEST")
+
+	dispatchPhoneNumber := os.Getenv("DISPATCH_PHONE_NUMBER")
+	dispatchPhoneNumberTest := os.Getenv("DISPATCH_PHONE_NUMBER_TEST")
 	notificationMethods := os.Getenv("NOTIFICATION_METHODS")
 	notificationStrategy := os.Getenv("NOTIFICATION_STRATEGY")
 
@@ -40,6 +56,12 @@ func main() {
 	voiceConnectingMessage := os.Getenv("VOICE_CONNECTING_MESSAGE")
 	voiceMissedCallStaffMessage := os.Getenv("VOICE_MISSED_CALL_STAFF_MESSAGE")
 	voiceMissedCallCallerMessage := os.Getenv("VOICE_MISSED_CALL_CALLER_MESSAGE")
+
+	smsStaffTemplateTest := os.Getenv("SMS_STAFF_MESSAGE_TEMPLATE_TEST")
+	smsSenderResponseTest := os.Getenv("SMS_SENDER_RESPONSE_MESSAGE_TEST")
+	voiceConnectingMessageTest := os.Getenv("VOICE_CONNECTING_MESSAGE_TEST")
+	voiceMissedCallStaffMessageTest := os.Getenv("VOICE_MISSED_CALL_STAFF_MESSAGE_TEST")
+	voiceMissedCallCallerMessageTest := os.Getenv("VOICE_MISSED_CALL_CALLER_MESSAGE_TEST")
 
 	// Set defaults if not provided
 	if smsStaffTemplate == "" {
@@ -117,10 +139,19 @@ func main() {
 	}()
 
 	config := handlers.Config{
-		RequestAuthToken:     requestAuthToken,
-		DispatchPhoneNumber:  dispatchPhoneNumber,
-		NotificationStrategy: notificationStrategy,
-		Timeout:              timeout,
+		RequestAuthToken:        requestAuthToken,
+		NotificationStrategy:    notificationStrategy,
+		Timeout:                 timeout,
+		DispatchPhoneNumber:     dispatchPhoneNumber,
+		NotificationPhoneNumber: notificationPhoneNumber,
+	}
+
+	testConfig := handlers.Config{
+		RequestAuthToken:        requestAuthToken,
+		NotificationStrategy:    notificationStrategy,
+		Timeout:                 timeout,
+		DispatchPhoneNumber:     dispatchPhoneNumberTest,
+		NotificationPhoneNumber: notificationPhoneNumberTest,
 	}
 
 	templates := handlers.MessageTemplates{
@@ -131,17 +162,27 @@ func main() {
 		VoiceMissedCallCallerMessage: voiceMissedCallCallerMessage,
 	}
 
-	handlers := handlers.NewService(client, config, templates)
+	testTemplates := handlers.MessageTemplates{
+		SMSSenderResponse:            smsSenderResponseTest,
+		SMSStaffTemplate:             smsStaffTemplateTest,
+		VoiceConnectingMessage:       voiceConnectingMessageTest,
+		VoiceMissedCallStaffMessage:  voiceMissedCallStaffMessageTest,
+		VoiceMissedCallCallerMessage: voiceMissedCallCallerMessageTest,
+	}
 
+	realHandlers := handlers.NewService(client, "dispatch_relay", config, templates)
+	testHandlers := handlers.NewService(client, "dispatch_relay_test", testConfig, testTemplates)
+
+	// TODO Don't contaminate the environment with prod and test handling
 	if enableSMS {
 		log.Println("Registering /sms route")
-		router.POST("/sms", handlers.SMS())
+		router.POST("/sms", routeByTestParam(realHandlers.SMS(), testHandlers.SMS()))
 	}
 
 	if enableVoice {
 		log.Println("Registering /voice and /voice-status routes")
-		router.POST("/voice", handlers.Voice())
-		router.POST("/voice-status", handlers.VoiceStatus())
+		router.POST("/voice", routeByTestParam(realHandlers.Voice(), testHandlers.Voice()))
+		router.POST("/voice-status", routeByTestParam(realHandlers.VoiceStatus(), testHandlers.VoiceStatus()))
 	}
 
 	router.GET("/health", func(ginCtx *gin.Context) {

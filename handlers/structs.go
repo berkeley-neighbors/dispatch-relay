@@ -33,22 +33,24 @@ type handlers struct {
 }
 
 type Config struct {
-	RequestAuthToken     string
-	DispatchPhoneNumber  string
-	NotificationStrategy string
-	Timeout              time.Duration
+	DatabaseName            string
+	RequestAuthToken        string
+	DispatchPhoneNumber     string
+	NotificationPhoneNumber string
+	NotificationStrategy    string
+	Timeout                 time.Duration
 }
 
-func NewService(client *mongo.Client, config Config, templates MessageTemplates) *handlers {
+func NewService(client *mongo.Client, databaseName string, config Config, templates MessageTemplates) *handlers {
 	return &handlers{
 		StaffHandle: &BoundHandle{
 			Client:  client,
-			DbName:  "dispatch_relay",
+			DbName:  databaseName,
 			ColName: "staff",
 		},
 		ThreadHandle: &BoundHandle{
 			Client:  client,
-			DbName:  "dispatch_relay",
+			DbName:  databaseName,
 			ColName: "threads",
 		},
 		Templates: templates,
