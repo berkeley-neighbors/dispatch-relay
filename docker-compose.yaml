@@ -8,7 +8,6 @@ services:
       - PORT=4514
       - TWILIO_ACCOUNT_SID=1234
       - TWILIO_AUTH_TOKEN=4567
-      - TWILIO_PHONE_NUMBER=+13735928559
       - GIN_MODE=release
       - NOTIFICATION_METHODS=SMS,CALL
       - SMS_STAFF_MESSAGE_TEMPLATE=Someone has sent a message

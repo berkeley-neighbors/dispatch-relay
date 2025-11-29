@@ -42,11 +42,6 @@ func main() {
 
 	mongoConnectionStr := os.Getenv("MONGO_CONNECTION_STR")
 	requestAuthToken := os.Getenv("AUTH_TOKEN")
-	notificationPhoneNumber := os.Getenv("NOTIFICATION_PHONE_NUMBER")
-	notificationPhoneNumberTest := os.Getenv("NOTIFICATION_PHONE_NUMBER_TEST")
-
-	dispatchPhoneNumber := os.Getenv("DISPATCH_PHONE_NUMBER")
-	dispatchPhoneNumberTest := os.Getenv("DISPATCH_PHONE_NUMBER_TEST")
 	notificationMethods := os.Getenv("NOTIFICATION_METHODS")
 	notificationStrategy := os.Getenv("NOTIFICATION_STRATEGY")
 
@@ -139,21 +134,19 @@ func main() {
 	}()
 
 	config := handlers.Config{
-		RequestAuthToken:        requestAuthToken,
-		NotificationStrategy:    notificationStrategy,
-		Timeout:                 timeout,
-		DispatchPhoneNumber:     dispatchPhoneNumber,
-		NotificationPhoneNumber: notificationPhoneNumber,
-		SkipStaffIgnore:         false,
+		DatabaseName:         "dispatch_relay",
+		RequestAuthToken:     requestAuthToken,
+		NotificationStrategy: notificationStrategy,
+		Timeout:              timeout,
+		SkipStaffIgnore:      false,
 	}
 
 	testConfig := handlers.Config{
-		RequestAuthToken:        requestAuthToken,
-		NotificationStrategy:    notificationStrategy,
-		Timeout:                 timeout,
-		DispatchPhoneNumber:     dispatchPhoneNumberTest,
-		NotificationPhoneNumber: notificationPhoneNumberTest,
-		SkipStaffIgnore:         true,
+		DatabaseName:         "dispatch_relay_test",
+		RequestAuthToken:     requestAuthToken,
+		NotificationStrategy: notificationStrategy,
+		Timeout:              timeout,
+		SkipStaffIgnore:      true,
 	}
 
 	templates := handlers.MessageTemplates{
@@ -172,8 +165,8 @@ func main() {
 		VoiceMissedCallCallerMessage: voiceMissedCallCallerMessageTest,
 	}
 
-	realHandlers := handlers.NewService(client, "dispatch_relay", config, templates)
-	testHandlers := handlers.NewService(client, "dispatch_relay_test", testConfig, testTemplates)
+	realHandlers := handlers.NewService(client, config.DatabaseName, config, templates)
+	testHandlers := handlers.NewService(client, testConfig.DatabaseName, testConfig, testTemplates)
 
 	// TODO Don't contaminate the environment with prod and test handling
 	if enableSMS {

@@ -4,29 +4,24 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/rand/v2"
 	"net/http"
 	"time"
 
 	"github.com/berkeley-neighbors/dispatch-relay/utils"
 
 	"github.com/gin-gonic/gin"
-	"github.com/twilio/twilio-go"
-	twilioApi "github.com/twilio/twilio-go/rest/api/v2010"
 	"github.com/twilio/twilio-go/twiml"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type VoiceHandlerOptions struct {
-	DispatchPhoneNumber          string
 	VoiceMissedCallStaffMessage  string
 	VoiceMissedCallCallerMessage string
 	VoiceConnectingMessage       string
 }
 
 type VoiceStatusHandlerOptions struct {
-	DispatchPhoneNumber          string
 	VoiceMissedCallStaffMessage  string
 	VoiceMissedCallCallerMessage string
 }
@@ -54,12 +49,20 @@ func (h *handlers) Voice() gin.HandlerFunc {
 		timedCtx, cancel := context.WithTimeout(context.Background(), h.Config.Timeout)
 		defer cancel()
 
+		// Fetch phone number configuration from MongoDB
+		phoneConfig, err := h.getSystemPhoneNumbers(timedCtx)
+		if err != nil {
+			fmt.Println("Error fetching phone number config:", err)
+			ginCtx.String(http.StatusInternalServerError, "Server error")
+			return
+		}
+
 		staffCollection := h.StaffHandle.Collection()
 
 		var staffMatch Staff
 		filter := bson.M{"phone_number": from}
 
-		err := staffCollection.FindOne(timedCtx, filter).Decode(&staffMatch)
+		err = staffCollection.FindOne(timedCtx, filter).Decode(&staffMatch)
 
 		isStaffMember := (err == nil)
 
@@ -115,48 +118,28 @@ func (h *handlers) Voice() gin.HandlerFunc {
 			}
 		}
 
-		var allStaffNumbers []bson.M
-		cursor, err := staffCollection.Find(timedCtx, bson.M{})
-
+		phoneNumbers, err := h.getActiveStaffPhoneNumbers(timedCtx)
 		if err != nil {
-			fmt.Printf("Error retrieving staff numbers: %v", err)
+			fmt.Printf("Error retrieving active staff: %v", err)
 			ginCtx.String(http.StatusInternalServerError, "Server error")
 			return
 		}
 
-		defer cursor.Close(timedCtx)
-
-		for cursor.Next(timedCtx) {
-			var staffMember bson.M
-			if err := cursor.Decode(&staffMember); err != nil {
-				fmt.Printf("Error decoding staff member: %v", err)
-				ginCtx.String(http.StatusInternalServerError, "Server error")
-				return
-			}
-
-			if isStaffMember && h.Config.SkipStaffIgnore {
-				staffPhoneNumber, ok := staffMember["phone_number"].(string)
-				if ok && staffPhoneNumber == from {
+		// If caller is a staff member in test mode, remove their number from the list
+		if isStaffMember && h.Config.SkipStaffIgnore {
+			filteredNumbers := make([]string, 0, len(phoneNumbers))
+			for _, phoneNumber := range phoneNumbers {
+				if phoneNumber != from {
+					filteredNumbers = append(filteredNumbers, phoneNumber)
+				} else {
 					fmt.Printf("Skipping caller's own number from dial list: %s\n", from)
-					continue
 				}
 			}
-
-			allStaffNumbers = append(allStaffNumbers, staffMember)
+			phoneNumbers = filteredNumbers
 		}
 
-		if err := cursor.Err(); err != nil {
-			fmt.Printf("Cursor error: %v", err)
-			ginCtx.String(http.StatusInternalServerError, "Server error")
-			return
-		}
-
-		rand.Shuffle(len(allStaffNumbers), func(i, j int) {
-			allStaffNumbers[i], allStaffNumbers[j] = allStaffNumbers[j], allStaffNumbers[i]
-		})
-
-		if len(allStaffNumbers) == 0 {
-			fmt.Printf("No staff members found in database")
+		if len(phoneNumbers) == 0 {
+			fmt.Printf("No active staff members found in database")
 			say := &twiml.VoiceSay{
 				Message: "Sorry, no dispatch staff are currently available. Please try again later or send a text message.",
 			}
@@ -171,21 +154,18 @@ func (h *handlers) Voice() gin.HandlerFunc {
 			return
 		}
 
-		fmt.Printf("Attempting to connect caller %s to %d staff members", from, len(allStaffNumbers))
+		fmt.Printf("Attempting to connect caller %s to %d active staff members", from, len(phoneNumbers))
 
 		// Create TwiML to forward the call to staff members using raw XML
 		var twimlResult string
-		if len(allStaffNumbers) > 0 {
+		if len(phoneNumbers) > 0 {
 			twimlXml := `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say>` + h.Templates.VoiceConnectingMessage + `</Say>
-    <Dial timeout="20" callerId="` + h.Config.DispatchPhoneNumber + `" action="/voice-status?token=` + h.Config.RequestAuthToken + `&amp;from=` + from + `">`
+    <Dial timeout="20" callerId="` + phoneConfig.Inbound + `" action="/voice-status?token=` + h.Config.RequestAuthToken + `&amp;from=` + from + `">`
 
-			for _, staffMember := range allStaffNumbers {
-				staffPhoneNumber, ok := staffMember["phone_number"].(string)
-				if ok {
-					twimlXml += `<Number>` + staffPhoneNumber + `</Number>`
-				}
+			for _, phoneNumber := range phoneNumbers {
+				twimlXml += `<Number>` + phoneNumber + `</Number>`
 			}
 
 			twimlXml += `
@@ -243,50 +223,29 @@ func (h *handlers) VoiceStatus() gin.HandlerFunc {
 			timedCtx, cancel := context.WithTimeout(context.Background(), h.Config.Timeout)
 			defer cancel()
 
-			staffCollection := h.StaffHandle.Collection()
-
-			var allStaffNumbers []bson.M
-			cursor, err := staffCollection.Find(timedCtx, bson.M{})
+			// Fetch phone number configuration from MongoDB
+			phoneConfig, err := h.getSystemPhoneNumbers(timedCtx)
 			if err != nil {
-				log.Printf("Error retrieving staff numbers: %v", err)
+				log.Printf("Error fetching phone number config: %v", err)
 				ginCtx.String(http.StatusInternalServerError, "Server error")
 				return
 			}
-			defer cursor.Close(timedCtx)
 
-			for cursor.Next(timedCtx) {
-				var staffMember bson.M
-				if err := cursor.Decode(&staffMember); err != nil {
-					continue
-				}
-				allStaffNumbers = append(allStaffNumbers, staffMember)
+			phoneNumbers, err := h.getActiveStaffPhoneNumbers(timedCtx)
+			if err != nil {
+				log.Printf("Error retrieving active staff: %v", err)
+				ginCtx.String(http.StatusInternalServerError, "Server error")
+				return
 			}
 
 			// Send SMS notifications since call wasn't answered
-			twilioClient := twilio.NewRestClient()
 			staffMessage := utils.ReplaceTemplateVars(h.Templates.VoiceMissedCallStaffMessage, map[string]string{
 				"from": from,
 				"time": time.Now().Format(time.RFC1123),
 			})
 
-			for _, staffMember := range allStaffNumbers {
-				staffPhoneNumber, ok := staffMember["phone_number"].(string)
-				if !ok {
-					continue
-				}
-
-				params := &twilioApi.CreateMessageParams{}
-				params.SetBody(staffMessage)
-				params.SetFrom(h.Config.DispatchPhoneNumber)
-				params.SetTo(staffPhoneNumber)
-
-				_, err := twilioClient.Api.CreateMessage(params)
-				if err != nil {
-					log.Printf("Error sending SMS to %s: %v", staffPhoneNumber, err)
-				} else {
-					log.Printf("Sent missed call SMS to %s", staffPhoneNumber)
-				}
-			}
+			// Send message to all active staff members
+			h.sendMessageToGroup(phoneConfig.Outbound, phoneNumbers, staffMessage)
 
 			say := &twiml.VoiceSay{
 				Message: h.Templates.VoiceMissedCallCallerMessage,
