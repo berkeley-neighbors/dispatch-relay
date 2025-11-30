@@ -78,7 +78,7 @@ func (h *handlers) getSystemPhoneNumbers(ctx context.Context) (*PhoneNumberConfi
 
 	// Fetch both numbers together
 	cursor, err := configCollection.Find(ctx, bson.M{
-		"type": bson.M{"$in": []string{"inbound_number", "outbound_number"}},
+		"key": bson.M{"$in": []string{"inbound_number", "outbound_number"}},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch phone number configs: %w", err)
@@ -89,7 +89,7 @@ func (h *handlers) getSystemPhoneNumbers(ctx context.Context) (*PhoneNumberConfi
 
 	for cursor.Next(ctx) {
 		var config struct {
-			Type  string `bson:"type"`
+			Key   string `bson:"key"`
 			Value string `bson:"value"`
 		}
 
@@ -97,7 +97,7 @@ func (h *handlers) getSystemPhoneNumbers(ctx context.Context) (*PhoneNumberConfi
 			return nil, fmt.Errorf("failed to decode config: %w", err)
 		}
 
-		switch config.Type {
+		switch config.Key {
 		case "inbound_number":
 			inbound = config.Value
 		case "outbound_number":
