@@ -49,13 +49,16 @@ func (h *handlers) SMS() gin.HandlerFunc {
 		}
 
 		staffCollection := h.StaffHandle.Collection()
+		blockListCollection := h.BlockListHandle.Collection()
 
 		var staffMatch Staff
+		var blockMatch BlockedNumber
 		filter := bson.M{"phone_number": from}
 
+		// Is Staff?
 		err = staffCollection.FindOne(timedCtx, filter).Decode(&staffMatch)
-
 		isStaffMember := (err == nil)
+
 		if isStaffMember && !h.Config.SkipStaffIgnore {
 			fmt.Println("Number belongs to staff member. Ignoring.")
 			doc, _ := twiml.CreateDocument()
@@ -72,9 +75,13 @@ func (h *handlers) SMS() gin.HandlerFunc {
 			return
 		}
 
-		if err != nil && err != mongo.ErrNoDocuments {
-			fmt.Println("Error finding staff number:", err)
-			ginCtx.String(http.StatusInternalServerError, "Server error")
+		// Is Blocked?
+		err = blockListCollection.FindOne(timedCtx, filter).Decode(&blockMatch)
+		isBlocked := (err == nil)
+
+		if isBlocked {
+			fmt.Println("Number is blocked:", from)
+			ginCtx.String(http.StatusOK, "")
 			return
 		}
 

@@ -58,12 +58,14 @@ func (h *handlers) Voice() gin.HandlerFunc {
 		}
 
 		staffCollection := h.StaffHandle.Collection()
+		blockListCollection := h.BlockListHandle.Collection()
 
 		var staffMatch Staff
+		var blockMatch BlockedNumber
 		filter := bson.M{"phone_number": from}
 
+		// Is Staff?
 		err = staffCollection.FindOne(timedCtx, filter).Decode(&staffMatch)
-
 		isStaffMember := (err == nil)
 
 		if isStaffMember && !h.Config.SkipStaffIgnore {
@@ -80,6 +82,16 @@ func (h *handlers) Voice() gin.HandlerFunc {
 
 			ginCtx.Header("Content-Type", "text/xml")
 			ginCtx.String(http.StatusOK, xml)
+			return
+		}
+
+		// Is Blocked?
+		err = blockListCollection.FindOne(timedCtx, filter).Decode(&blockMatch)
+		isBlocked := (err == nil)
+
+		if isBlocked {
+			fmt.Println("Number is blocked:", from)
+			ginCtx.String(http.StatusOK, "")
 			return
 		}
 
