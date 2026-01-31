@@ -81,7 +81,7 @@ func (h *handlers) SMS() gin.HandlerFunc {
 
 		if isBlocked {
 			fmt.Println("Number is blocked:", from)
-			ginCtx.String(http.StatusOK, "")
+			ginCtx.String(http.StatusForbidden, "From number is blocked")
 			return
 		}
 
