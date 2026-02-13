@@ -118,9 +118,9 @@ func (h *handlers) Voice() gin.HandlerFunc {
 			}
 		}
 
-		phoneNumbers, err := h.getActiveStaffPhoneNumbers(timedCtx)
+		phoneNumbers, err := h.getOnCallStaffPhoneNumbers(timedCtx)
 		if err != nil {
-			fmt.Printf("Error retrieving active staff: %v", err)
+			fmt.Printf("Error retrieving on-call staff: %v", err)
 			ginCtx.String(http.StatusInternalServerError, "Server error")
 			return
 		}
@@ -154,14 +154,14 @@ func (h *handlers) Voice() gin.HandlerFunc {
 			return
 		}
 
-		fmt.Printf("Attempting to connect caller %s to %d active staff members", from, len(phoneNumbers))
+		fmt.Printf("Attempting to connect caller %s to %d on-call staff members", from, len(phoneNumbers))
 
 		// Create TwiML to forward the call to staff members using raw XML
 		var twimlResult string
 		if len(phoneNumbers) > 0 {
 			twimlXml := `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say>` + h.Templates.VoiceConnectingMessage + `</Say>
+    <Say language="en-US" voice="Google.en-US-Chirp3-HD-Kore">` + h.Templates.VoiceConnectingMessage + `</Say>
     <Dial timeout="20" callerId="` + phoneConfig.Inbound + `" action="/voice-status?token=` + h.Config.RequestAuthToken + `&amp;from=` + from + `">`
 
 			for _, phoneNumber := range phoneNumbers {

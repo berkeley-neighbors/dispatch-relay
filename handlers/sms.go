@@ -110,14 +110,14 @@ func (h *handlers) SMS() gin.HandlerFunc {
 		}
 
 		if !threadExists || h.Config.NotificationStrategy == "ALWAYS" {
-			phoneNumbers, err := h.getActiveStaffPhoneNumbers(timedCtx)
+			phoneNumbers, err := h.getOnCallStaffPhoneNumbers(timedCtx)
 			if err != nil {
-				fmt.Println("Error retrieving active staff:", err)
+				fmt.Println("Error retrieving on-call staff:", err)
 				ginCtx.String(http.StatusInternalServerError, "Server error")
 				return
 			}
 
-			fmt.Printf("Messaging %d active staff members\n", len(phoneNumbers))
+			fmt.Printf("Messaging %d on-call staff members\n", len(phoneNumbers))
 
 			// Build staff message using template with variable replacement
 			staffMessage := utils.ReplaceTemplateVars(h.Templates.SMSStaffTemplate, map[string]string{
