@@ -56,6 +56,8 @@ func main() {
 	voiceConnectingMessage := os.Getenv("VOICE_CONNECTING_MESSAGE")
 	voiceMissedCallStaffMessage := os.Getenv("VOICE_MISSED_CALL_STAFF_MESSAGE")
 	voiceMissedCallCallerMessage := os.Getenv("VOICE_MISSED_CALL_CALLER_MESSAGE")
+	scheduleReminderMessage := os.Getenv("SCHEDULE_REMINDER_MESSAGE")
+	scheduleReminderHour := os.Getenv("SCHEDULE_REMINDER_HOUR")
 
 	smsStaffTemplateTest := os.Getenv("SMS_STAFF_MESSAGE_TEMPLATE_TEST")
 	smsSenderResponseTest := os.Getenv("SMS_SENDER_RESPONSE_MESSAGE_TEST")
@@ -82,6 +84,18 @@ func main() {
 
 	if voiceMissedCallCallerMessage == "" {
 		voiceMissedCallCallerMessage = "Sorry, no dispatch staff are available to take your call right now. We have sent an urgent message to all staff members. Please try calling back in a few minutes or send a text message for assistance."
+	}
+
+	if scheduleReminderMessage == "" {
+		scheduleReminderMessage = "Reminder: You are on-call today. Please ensure you are available to respond to dispatch messages and calls."
+	}
+
+	reminderHour := 8
+	if scheduleReminderHour != "" {
+		parsed := 0
+		if _, err := fmt.Sscanf(scheduleReminderHour, "%d", &parsed); err == nil && parsed >= 0 && parsed <= 23 {
+			reminderHour = parsed
+		}
 	}
 
 	if notificationStrategy == "" {
@@ -172,6 +186,23 @@ func main() {
 
 	realHandlers := handlers.NewService(client, config.DatabaseName, config, templates, scheduleDatabaseName)
 	testHandlers := handlers.NewService(client, testConfig.DatabaseName, testConfig, testTemplates, scheduleDatabaseName)
+
+	// Start background schedule reminder goroutine
+	go func() {
+		for {
+			now := time.Now()
+			nextRun := time.Date(now.Year(), now.Month(), now.Day(), reminderHour, 0, 0, 0, now.Location())
+			if now.After(nextRun) {
+				nextRun = nextRun.Add(24 * time.Hour)
+			}
+			log.Printf("Schedule reminder: next check at %s", nextRun.Format(time.RFC3339))
+			time.Sleep(time.Until(nextRun))
+
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			realHandlers.SendScheduleReminders(ctx, scheduleReminderMessage)
+			cancel()
+		}
+	}()
 
 	// TODO Don't contaminate the environment with prod and test handling
 	if enableSMS {

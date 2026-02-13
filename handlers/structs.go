@@ -190,6 +190,7 @@ type Schedule struct {
 	EndTime     string        `bson:"end_time"`
 	DayOfWeek   int           `bson:"day_of_week"`
 	Recurring   bool          `bson:"recurring"`
+	Always      bool          `bson:"always"`
 	Date        string        `bson:"date"`
 }
 
@@ -222,6 +223,9 @@ func (h *handlers) getOnCallStaffPhoneNumbers(ctx context.Context) ([]string, er
 
 	filter := bson.M{
 		"$or": []bson.M{
+			{
+				"always": true,
+			},
 			{
 				"recurring":   true,
 				"day_of_week": currentDayOfWeek,
