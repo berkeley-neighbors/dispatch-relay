@@ -44,12 +44,13 @@ type PhoneNumberConfig struct {
 }
 
 type handlers struct {
-	StaffHandle    *BoundHandle
-	ThreadHandle   *BoundHandle
-	ConfigHandle   *BoundHandle
-	ScheduleHandle *BoundHandle
-	Templates      MessageTemplates
-	Config         Config
+	StaffHandle     *BoundHandle
+	ThreadHandle    *BoundHandle
+	ConfigHandle    *BoundHandle
+	BlockListHandle *BoundHandle
+	ScheduleHandle  *BoundHandle
+	Templates       MessageTemplates
+	Config          Config
 }
 
 func NewService(client *mongo.Client, databaseName string, config Config, templates MessageTemplates) *handlers {
@@ -68,6 +69,11 @@ func NewService(client *mongo.Client, databaseName string, config Config, templa
 			Client:  client,
 			DbName:  databaseName,
 			ColName: "config",
+		},
+		BlockListHandle: &BoundHandle{
+			Client:  client,
+			DbName:  databaseName,
+			ColName: "blocklist",
 		},
 		ScheduleHandle: &BoundHandle{
 			Client:  client,
@@ -180,6 +186,14 @@ type Thread struct {
 	PhoneNumber string        `bson:"phone_number"`
 	Status      string        `bson:"status"`
 	CreatedAt   time.Time     `bson:"created_at"`
+}
+
+type BlockedNumber struct {
+	ID          bson.ObjectID `bson:"_id,omitempty"`
+	PhoneNumber string        `bson:"phone_number"`
+	CreatedAt   time.Time     `bson:"created_at"`
+	Reason      string        `bson:"reason"`
+	BlockedBy   string        `bson:"blocked_by"`
 }
 
 type Schedule struct {
