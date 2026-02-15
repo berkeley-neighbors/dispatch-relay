@@ -44,12 +44,6 @@ func main() {
 	requestAuthToken := os.Getenv("AUTH_TOKEN")
 	notificationMethods := os.Getenv("NOTIFICATION_METHODS")
 	notificationStrategy := os.Getenv("NOTIFICATION_STRATEGY")
-	scheduleDatabaseName := os.Getenv("SCHEDULE_DATABASE")
-
-	if scheduleDatabaseName == "" {
-		scheduleDatabaseName = "dispatch"
-	}
-
 	// SMS message templates
 	smsStaffTemplate := os.Getenv("SMS_STAFF_MESSAGE_TEMPLATE")
 	smsSenderResponse := os.Getenv("SMS_SENDER_RESPONSE_MESSAGE")
@@ -184,8 +178,8 @@ func main() {
 		VoiceMissedCallCallerMessage: voiceMissedCallCallerMessageTest,
 	}
 
-	realHandlers := handlers.NewService(client, config.DatabaseName, config, templates, scheduleDatabaseName)
-	testHandlers := handlers.NewService(client, testConfig.DatabaseName, testConfig, testTemplates, scheduleDatabaseName)
+	realHandlers := handlers.NewService(client, config.DatabaseName, config, templates)
+	testHandlers := handlers.NewService(client, testConfig.DatabaseName, testConfig, testTemplates)
 
 	// Start background schedule reminder goroutine
 	go func() {

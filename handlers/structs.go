@@ -52,7 +52,7 @@ type handlers struct {
 	Config         Config
 }
 
-func NewService(client *mongo.Client, databaseName string, config Config, templates MessageTemplates, scheduleDatabaseName string) *handlers {
+func NewService(client *mongo.Client, databaseName string, config Config, templates MessageTemplates) *handlers {
 	return &handlers{
 		StaffHandle: &BoundHandle{
 			Client:  client,
@@ -71,7 +71,7 @@ func NewService(client *mongo.Client, databaseName string, config Config, templa
 		},
 		ScheduleHandle: &BoundHandle{
 			Client:  client,
-			DbName:  scheduleDatabaseName,
+			DbName:  databaseName,
 			ColName: "schedules",
 		},
 		Templates: templates,
