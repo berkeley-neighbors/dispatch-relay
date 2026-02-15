@@ -48,6 +48,7 @@ type handlers struct {
 	ThreadHandle    *BoundHandle
 	ConfigHandle    *BoundHandle
 	BlockListHandle *BoundHandle
+	ScheduleHandle  *BoundHandle
 	Templates       MessageTemplates
 	Config          Config
 }
@@ -73,6 +74,11 @@ func NewService(client *mongo.Client, databaseName string, config Config, templa
 			Client:  client,
 			DbName:  databaseName,
 			ColName: "blocklist",
+		},
+		ScheduleHandle: &BoundHandle{
+			Client:  client,
+			DbName:  databaseName,
+			ColName: "schedules",
 		},
 		Templates: templates,
 		Config:    config,
@@ -170,6 +176,7 @@ func (h *handlers) getActiveStaffPhoneNumbers(ctx context.Context) ([]string, er
 
 type Staff struct {
 	ID          bson.ObjectID `bson:"_id,omitempty" json:"_id"`
+	PublicID    string        `bson:"id" json:"id"`
 	PhoneNumber string        `bson:"phone_number" json:"phone_number"`
 	Active      bool          `bson:"active" json:"active"`
 }
@@ -187,4 +194,101 @@ type BlockedNumber struct {
 	CreatedAt   time.Time     `bson:"created_at"`
 	Reason      string        `bson:"reason"`
 	BlockedBy   string        `bson:"blocked_by"`
+}
+
+type Schedule struct {
+	ID          bson.ObjectID `bson:"_id,omitempty"`
+	UID         int           `bson:"uid"`
+	PhoneNumber string        `bson:"phone_number"`
+	StartTime   string        `bson:"start_time"`
+	EndTime     string        `bson:"end_time"`
+	DayOfWeek   int           `bson:"day_of_week"`
+	Recurring   bool          `bson:"recurring"`
+	Always      bool          `bson:"always"`
+	Date        string        `bson:"date"`
+}
+
+// getOnCallStaffPhoneNumbers returns the phone numbers of staff members
+// who are currently on-call based on their schedule entries.
+// Falls back to all active staff if no schedules are configured.
+func (h *handlers) getOnCallStaffPhoneNumbers(ctx context.Context) ([]string, error) {
+	activePhones, err := h.getActiveStaffPhoneNumbers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	scheduleCollection := h.ScheduleHandle.Collection()
+
+	count, err := scheduleCollection.CountDocuments(ctx, bson.M{})
+	if err != nil {
+		log.Printf("Error checking schedule collection, falling back to all active staff: %v", err)
+		return activePhones, nil
+	}
+
+	if count == 0 {
+		log.Println("No schedules configured, using all active staff")
+		return activePhones, nil
+	}
+
+	now := time.Now()
+	currentTime := now.Format("15:04")
+	currentDayOfWeek := int(now.Weekday())
+	currentDate := now.Format("2006-01-02")
+
+	filter := bson.M{
+		"$or": []bson.M{
+			{
+				"always": true,
+			},
+			{
+				"recurring":   true,
+				"day_of_week": currentDayOfWeek,
+				"start_time":  bson.M{"$lte": currentTime},
+				"end_time":    bson.M{"$gte": currentTime},
+			},
+			{
+				"recurring":  false,
+				"date":       currentDate,
+				"start_time": bson.M{"$lte": currentTime},
+				"end_time":   bson.M{"$gte": currentTime},
+			},
+		},
+	}
+
+	cursor, err := scheduleCollection.Find(ctx, filter)
+	if err != nil {
+		log.Printf("Error querying schedules, falling back to all active staff: %v", err)
+		return activePhones, nil
+	}
+	defer cursor.Close(ctx)
+
+	onCallPhones := make(map[string]bool)
+	for cursor.Next(ctx) {
+		var schedule Schedule
+		if err := cursor.Decode(&schedule); err != nil {
+			log.Printf("Error decoding schedule: %v", err)
+			continue
+		}
+		onCallPhones[schedule.PhoneNumber] = true
+	}
+
+	if len(onCallPhones) == 0 {
+		log.Println("No staff currently on-call, falling back to all active staff")
+		return activePhones, nil
+	}
+
+	var filteredPhones []string
+	for _, phone := range activePhones {
+		if onCallPhones[phone] {
+			filteredPhones = append(filteredPhones, phone)
+		}
+	}
+
+	if len(filteredPhones) == 0 {
+		log.Println("On-call staff found in schedules but none are active in staff list, falling back to all active staff")
+		return activePhones, nil
+	}
+
+	log.Printf("Filtered to %d on-call staff members out of %d active", len(filteredPhones), len(activePhones))
+	return filteredPhones, nil
 }
